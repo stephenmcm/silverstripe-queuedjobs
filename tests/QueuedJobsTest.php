@@ -70,8 +70,8 @@ class QueuedJobsTest extends SapphireTest {
 		// Create a new job with no run as ID it will have the current logged in user.
         $adminID = $this->logInWithPermission('ADMIN');
         $job = new TestQueuedJob();
-        $job->JobTitle = "Job run as {$job->RunAsID} - " . rand(0, 100);
-        $job->Signature = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $job->JobTitle = "Job run as {$job->RunAsID} - " . substr(md5(microtime()), 0, 9);
+        $job->Signature = "Job run as {$job->RunAsID} - " . substr(md5(microtime()), 0, 9);
         $jobId = $svc->queueJob($job);
         $list = $svc->getJobList();
 
@@ -81,8 +81,8 @@ class QueuedJobsTest extends SapphireTest {
         // Create a new job with no run as ID it will have the current logged in user.
         Member::currentUser()->logOut();
         $job = new TestQueuedJob();
-        $job->JobTitle = "Job run as {$job->RunAsID} - " . rand(0, 100);
-        $job->Signature = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $job->JobTitle = "Job run as {$job->RunAsID} - " . substr(md5(microtime()), 0, 9);
+        $job->Signature = "Job run as {$job->RunAsID} - " . substr(md5(microtime()), 0, 9);
         $jobId = $svc->queueJob($job);
         $list = $svc->getJobList();
 
@@ -92,9 +92,8 @@ class QueuedJobsTest extends SapphireTest {
         // Log in as another user but set the run ID the Run As User has
         $dummyID = $this->logInWithPermission('DUMMY');
         $job = new TestQueuedJob();
-        $job->RunAsID = $adminID;
-        $job->JobTitle = "Job run as {$job->RunAsID} - " . rand(0, 100);
-        $job->Signature = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $job->JobTitle = "Job run as {$job->RunAsID} - " . substr(md5(microtime()), 0, 9);
+        $job->Signature = "Job run as {$job->RunAsID} - " . substr(md5(microtime()), 0, 9);
         $jobId = $svc->queueJob($job);
 
         $myJob = $list->byID($jobId);
@@ -104,16 +103,15 @@ class QueuedJobsTest extends SapphireTest {
 
         // Set the ID to null
         $job = new TestQueuedJob();
-        $job->RunAsID = null;
-        $job->JobTitle = "Job run as {$job->RunAsID} - " . rand(0, 100);
-        $job->Signature = "Job run as {$job->RunAsID} - " . rand(0, 100);
-        $jobId = $svc->queueJob($job);
+        $job->JobTitle = "Job run as {$job->RunAsID} - " . substr(md5(microtime()), 0, 9);
+        $job->Signature = "Job run as {$job->RunAsID} - " . substr(md5(microtime()), 0, 9);
+        $jobId = $svc->queueJob($job, $startAfter = null, $userID = $adminID);
 
         $list = $svc->getJobList();
 
         $myJob = $list->byID($jobId);
         // RunAsID is set to current user in QueuedJobService:queueJob()
-        $this->assertEquals("DUMMY@example.org", $myJob->RunAs()->Email);
+        $this->assertEquals("ADMIN@example.org", $myJob->RunAs()->Email);
     }
 
 	public function testQueueSignature() {
@@ -130,7 +128,7 @@ class QueuedJobsTest extends SapphireTest {
 
 		// now try another, but with different params
 		$newJob = new TestQueuedJob();
-		$newJob->randomParam = 'stuff';
+        $newJob->randomParam = 'stuff';
 		$newId = $svc->queueJob($newJob);
 
 		$this->assertNotEquals($jobId, $newId);
@@ -208,7 +206,8 @@ class QueuedJobsTest extends SapphireTest {
 		$this->assertTrue($result);
 
 		// we want to make sure that the current user is the runas user of the job
-		$descriptor = DataObject::get_by_id('QueuedJobDescriptor', $id);
+        $descriptor = DataObject::get_by_id('QueuedJobDescriptor', $id);
+        $this->assertEquals("DUMMYUSER@example.org", $descriptor->RunAs()->Email);
 		$this->assertEquals('Complete', $descriptor->JobStatus);
 	}
 
@@ -252,12 +251,12 @@ class QueuedJobsTest extends SapphireTest {
 
 		$job = new TestQueuedJob();
 		// to get around the signature checks
-		$job->randomParam = 'me';
+        $job->randomParam = 'me';
 		$id2 = $svc->queueJob($job);
 
 		$job = new TestQueuedJob();
 		// to get around the signature checks
-		$job->randomParam = 'mo';
+        $job->randomParam = 'mo';
 		$id3 = $svc->queueJob($job);
 
 		$this->assertEquals(2, $id3 - $id1);
@@ -392,7 +391,43 @@ class QueuedJobsTest extends SapphireTest {
 		$descriptor = QueuedJobDescriptor::get()->byID($id);
 		$this->assertEquals(QueuedJob::STATUS_PAUSED, $descriptor->JobStatus);
 		$this->assertEmpty($nextJob);
-	}
+    }
+
+    public function testJobRunAsOnRepeatingJobs()
+    {
+        $svc = $this->getService();
+        $list = $svc->getJobList();
+        foreach ($list as $job) {
+            $job->delete();
+        }
+
+		// Create a new job with no run as ID it will have the current logged in user.
+        $adminID = $this->logInWithPermission('ADMIN');
+        $job = new RepeatingTestQueuedJob();
+        $jobId = $svc->queueJob($job);
+
+        // Create a new job with no run as ID it will have the current logged in user.
+        Member::currentUser()->logOut();
+        $job = new RepeatingTestQueuedJob();
+        $jobId = $svc->queueJob($job);
+
+        // Log in as another user but set the run ID the Run As User has
+        $dummyID = $this->logInWithPermission('DUMMY');
+        $job = new RepeatingTestQueuedJob();
+        $jobId = $svc->queueJob($job);
+
+        // Set the ID to Admin
+        $job = new RepeatingTestQueuedJob();
+        $jobId = $svc->queueJob($job, $startAfter = null, $userID = $adminID);
+
+        $this->assertEquals(4, $svc->getJobList()->count());
+        $job = $svc->getNextPendingJob(QueuedJob::QUEUED);
+        if ($job) {
+            $success = $svc->runJob($job->ID);
+        }
+        $this->assertEquals(4, $svc->getJobList()->count());
+    }
+
 
     public function testExceptionWithMemoryExhaustion() {
         $svc = $this->getService();
@@ -405,7 +440,11 @@ class QueuedJobsTest extends SapphireTest {
         $mem = Config::inst()->get('QueuedJobService', 'memory_limit');
         Config::inst()->update('QueuedJobService', 'memory_limit', 1);
 
-        $svc->runJob($id);
+        try {
+            $svc->runJob($id);
+        } catch (\Exception $e) {
+            //noop shh...
+        }
 
         Config::inst()->update('QueuedJobService', 'memory_limit', $mem);
 
@@ -528,7 +567,7 @@ class TestExceptingJob extends  AbstractQueuedJob implements QueuedJob {
 	}
 
 	public function getTitle() {
-		return $this->JobTitle;
+		return "A Test job";
 	}
 
 	public function setup() {
@@ -579,4 +618,14 @@ class TestQueuedJob extends AbstractQueuedJob implements QueuedJob {
 			$this->isComplete = true;
 		}
 	}
+}
+
+class RepeatingTestQueuedJob extends TestQueuedJob {
+
+    public function __construct($type = null)
+    {
+        parent::__construct($type);
+        $this->JobTitle = "Job run as {$this->RunAsID} - " . substr(md5(microtime()), 0, 9);
+        $this->Signature = $this->JobTitle;
+    }
 }
