@@ -59,25 +59,62 @@ class QueuedJobsTest extends SapphireTest {
 		$this->assertNotNull($myJob->SavedJobData);
 	}
 
-	public function testJobRunAs() {
-		$svc = $this->getService();
-		$list = $svc->getJobList();
-		foreach ($list as $job) {
-			$job->delete();
-		}
+    public function testJobRunAs()
+    {
+        $svc = $this->getService();
+        $list = $svc->getJobList();
+        foreach ($list as $job) {
+            $job->delete();
+        }
 
-		$this->logInWithPermission('DUMMY');
+		// Create a new job with no run as ID it will have the current logged in user.
+        $adminID = $this->logInWithPermission('ADMIN');
+        $job = new TestQueuedJob();
+        $job->JobTitle = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $job->Signature = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $jobId = $svc->queueJob($job);
+        $list = $svc->getJobList();
 
-		// lets create a new job and add it tio the queue
-		$job = new TestQueuedJob();
-		$job->runningAs = "DUMMY";
-		$jobId = $svc->queueJob($job);
-		$list = $svc->getJobList();
+        $myJob = $list->byID($jobId);
+        $this->assertEquals("ADMIN@example.org", $myJob->RunAs()->Email);
 
-		$myJob = $list->First();
+        // Create a new job with no run as ID it will have the current logged in user.
+        Member::currentUser()->logOut();
+        $job = new TestQueuedJob();
+        $job->JobTitle = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $job->Signature = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $jobId = $svc->queueJob($job);
+        $list = $svc->getJobList();
 
-		$this->assertEquals("DUMMY@example.org", $myJob->RunAs()->Email);
-	}
+        $myJob = $list->byID($jobId);
+        $this->assertEquals(null, $myJob->RunAs()->Email);
+
+        // Log in as another user but set the run ID the Run As User has
+        $dummyID = $this->logInWithPermission('DUMMY');
+        $job = new TestQueuedJob();
+        $job->RunAsID = $adminID;
+        $job->JobTitle = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $job->Signature = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $jobId = $svc->queueJob($job);
+
+        $myJob = $list->byID($jobId);
+        // RunAsID is set to current user in QueuedJobService:queueJob()
+        $this->assertEquals("DUMMY@example.org", $myJob->RunAs()->Email);
+
+
+        // Set the ID to null
+        $job = new TestQueuedJob();
+        $job->RunAsID = null;
+        $job->JobTitle = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $job->Signature = "Job run as {$job->RunAsID} - " . rand(0, 100);
+        $jobId = $svc->queueJob($job);
+
+        $list = $svc->getJobList();
+
+        $myJob = $list->byID($jobId);
+        // RunAsID is set to current user in QueuedJobService:queueJob()
+        $this->assertEquals("DUMMY@example.org", $myJob->RunAs()->Email);
+    }
 
 	public function testQueueSignature() {
 		$svc = $this->getService();
@@ -491,7 +528,7 @@ class TestExceptingJob extends  AbstractQueuedJob implements QueuedJob {
 	}
 
 	public function getTitle() {
-		return "A Test job throwing exceptions";
+		return $this->JobTitle;
 	}
 
 	public function setup() {

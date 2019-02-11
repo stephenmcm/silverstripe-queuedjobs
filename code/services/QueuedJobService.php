@@ -512,7 +512,7 @@ class QueuedJobService {
 		$originalUserID = isset($_SESSION['loggedInAs']) ? $_SESSION['loggedInAs'] : 0;
 		$originalUser = $originalUserID ? DataObject::get_by_id('Member', $originalUserID) : null;
 		$runAsUser = null;
-
+        // If originalUserID is set and RunAs is null or non-existant RunAs won't reset
 		if (Director::is_cli() || !$originalUser || Permission::checkMember($originalUser, 'ADMIN')) {
 			$runAsUser = $jobDescriptor->RunAs();
 			if ($runAsUser && $runAsUser->exists()) {
